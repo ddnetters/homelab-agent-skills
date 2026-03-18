@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve homelab-claude-skills!
+Thanks for helping improve agent-skills!
 
 ## Adding a new skill
 

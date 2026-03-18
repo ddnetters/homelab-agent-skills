@@ -1,6 +1,6 @@
 ---
 name: ntfy-notifications
-description: Self-hosted push notifications with ntfy — publishing, authentication, priorities, integration patterns for homelab scripts and monitoring
+description: Self-hosted push notifications with ntfy — publishing, authentication, priorities, and integration patterns for scripts and monitoring
 ---
 
 # ntfy Notifications
@@ -79,7 +79,7 @@ curl -T /var/log/backup.log \
 
 ## Tags (emoji shortcodes)
 
-Common tags for homelab notifications:
+Common tags for notifications:
 
 | Tag | Emoji | Use for |
 |-----|-------|---------|
@@ -176,7 +176,7 @@ docker exec ntfy ntfy token list
 docker exec ntfy ntfy token remove USERNAME TOKEN
 ```
 
-## Homelab integration patterns
+## Integration patterns
 
 ### Backup script notification
 

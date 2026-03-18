@@ -1,12 +1,12 @@
 ---
 name: Skill request
-about: Suggest a new homelab skill
+about: Suggest a new agent skill
 labels: enhancement
 ---
 
 ## Service
 
-<!-- What homelab service should we add a skill for? -->
+<!-- What service or tool should we add a skill for? -->
 
 ## Why
 

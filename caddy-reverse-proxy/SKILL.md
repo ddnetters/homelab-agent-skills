@@ -1,11 +1,11 @@
 ---
 name: caddy-reverse-proxy
-description: Caddy reverse proxy configuration, Caddyfile syntax, automatic HTTPS, Docker integration, and common homelab patterns
+description: Caddy reverse proxy configuration, Caddyfile syntax, automatic HTTPS, Docker integration, and common patterns
 ---
 
 # Caddy Reverse Proxy
 
-Caddy is a modern web server with automatic HTTPS. This skill covers Caddyfile configuration, reverse proxy patterns, and Docker deployment for homelabs.
+Caddy is a modern web server with automatic HTTPS. This skill covers Caddyfile configuration, reverse proxy patterns, and Docker deployment.
 
 ## Caddyfile basics
 
@@ -132,7 +132,7 @@ service.example.com {
 }
 ```
 
-## Common homelab patterns
+## Common patterns
 
 ### Catch-all / landing page
 

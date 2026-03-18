@@ -11,6 +11,7 @@
 - [ ] arr-media-stack
 - [ ] langfuse-observability
 - [ ] plex-media-server
+- [ ] slite-knowledge-base
 - [ ] New skill: <!-- name -->
 - [ ] Other (README, CI, etc.)
 
