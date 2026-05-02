@@ -77,6 +77,7 @@ For each PR:
    - **Never codex** — codex's value is autonomous execution; review is read+reason. Same sandbox traps as `invoking-codex-exec` apply for zero benefit.
 
    Whichever target is used, the reviewer should look at:
+   - Scope adherence: the diff stays within the dispatch prompt's `## Scope` block — files or behaviors outside `In scope` (or explicitly listed `Out of scope`) are scope-creep, flag as Blocking; decisions that contradict resolved `Open questions` are also Blocking
    - Rebase integrity (nothing lost from concurrent merges to main)
    - Correctness of renames / retargets
    - Race conditions in new DB writes (the select-then-insert antipattern is common — prefer `INSERT ... ON CONFLICT DO UPDATE` for upserts)
