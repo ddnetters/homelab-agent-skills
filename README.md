@@ -12,6 +12,11 @@ A curated collection of agent skills for developer tools, infrastructure, media 
 | [langfuse-observability](langfuse-observability/) | LLM observability with Langfuse (traces, costs, metrics) | `npx skills add ddnetters/agent-skills@langfuse-observability` |
 | [plex-media-server](plex-media-server/) | Plex Media Server API and management | `npx skills add ddnetters/agent-skills@plex-media-server` |
 | [slite-knowledge-base](slite-knowledge-base/) | Slite knowledge base API — ask, search, notes, and knowledge health | `npx skills add ddnetters/agent-skills@slite-knowledge-base` |
+| [invoking-codex-exec](invoking-codex-exec/) | One-shot `codex exec` dispatch — flags, sandbox traps, PID-based monitoring, recovery | `npx skills add ddnetters/agent-skills@invoking-codex-exec` |
+| [codex-task-waves](codex-task-waves/) | Single-task codex delegation — plan → split into waves → dispatch → review → PR | `npx skills add ddnetters/agent-skills@codex-task-waves` |
+| [codex-issue-waves](codex-issue-waves/) | Multi-issue parallel codex batches in isolated worktrees, then review and merge waves | `npx skills add ddnetters/agent-skills@codex-issue-waves` |
+
+See [CODEX_WAVES.md](CODEX_WAVES.md) for the end-to-end flowchart across the three codex skills.
 
 ## Install all
 
