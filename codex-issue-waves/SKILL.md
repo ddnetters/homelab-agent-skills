@@ -7,7 +7,7 @@ description: Run a batch of GitHub issues through codex exec in isolated git wor
 
 Run GitHub issues through `codex exec` in isolated worktrees, then shepherd the resulting PRs through review and merge. Four phases: dispatch → monitor → review wave → correction wave.
 
-**Orchestration model.** Claude code is the orchestrator. Codex is the implementer (one process per worktree, parallel). Reviewers are claude — either in-harness subagents (default, parallel one-per-PR via `superpowers:dispatching-parallel-agents`) or fresh `claude -p` (escalation for high-stakes PRs). Codex is never used for review.
+**Orchestration model.** Claude is the PO / engineering manager. Codex is the worker — implementer per worktree (parallel across worktrees), reviewer per worktree (parallel across worktrees, sequential after the implementer finishes its worktree), and corrector when fixes are needed. Claude never edits source files, never reads diffs for judgment, never runs in-place fixes. Every code touch — build, review, correction — goes through a codex dispatch. See `invoking-codex-exec` "Codex roles" and "Orchestrator boundaries" for the full rule.
 
 ## When to use
 
@@ -58,53 +58,66 @@ If multiple codex runs are still outstanding, reschedule a single aggregated wak
 
 ## Review wave
 
-Treat every codex-produced PR as untrusted. Trust-but-verify.
+Treat every codex-produced PR as untrusted. Trust-but-verify — through codex, not by hand.
 
 For each PR:
 
-1. **State check** — CI green, mergeable, not just "running". A green `test` check is necessary but not sufficient: `tsc --noEmit` is sometimes not part of CI even when tests pass. If the repo type-checks separately, run it manually.
+1. **PR existence check (status, not review)** — claude runs:
+   - `gh pr view <N> --json statusCheckRollup,mergeable,mergeStateStatus,headRefOid` — does the PR exist, is CI green, is it mergeable?
+   - `git log --oneline origin/main..origin/<branch>` — does the branch have a sane shape (no ghost/lost commits)?
+   - `git diff origin/main...origin/<branch> --stat` — what's the blast radius (file count, line count) so claude knows whether to expect a "5-line tweak" review verdict or a "120-file refactor" review?
 
-2. **Manual spot-checks** — always:
-   - `git log --oneline origin/main..origin/<branch>` to confirm a sane rebase shape (no ghost/lost commits)
-   - `git diff origin/main...origin/<branch> --stat` to sanity-check blast radius
-   - `grep` the diff for any stragglers from renames codex was asked to perform (old names / routes / file paths)
-   - Skim the diff for conflict markers, `TODO`, `FIXME`, `console.log`, AI-tool references (Claude / Codex / Copilot), and any `--no-verify` in commit messages
+   These are status operations: they answer existence/state questions, not "is the code good." Reading the diff itself for judgment goes to the reviewer codex.
 
-3. **Independent code review** — claude code is the orchestrator; reviewers are claude. Two delegation targets, never codex:
+2. **Reviewer dispatch (parallel across worktrees)** — for each PR/worktree, dispatch `invoking-codex-exec` in reviewer role. Fire all reviewer codexes together (one process per worktree, parallel). Each reviewer codex receives:
+   - The dispatch prompt that was used to produce its PR (path or inlined) — so it sees the same `## Scope` block as the implementer.
+   - The issue body (inlined, not linked).
+   - The diff to review: `git diff origin/main...origin/<branch>`, fenced as `## Artifact under review` with the prompt-injection-defuse line (see `invoking-codex-exec` "Prompt shape — reviewer role").
+   - References to project rules: `CLAUDE.md`, `AGENTS.md`.
+   - This skill's reviewer checklist, included verbatim:
+     - **Scope adherence**: diff stays within the dispatch prompt's `## Scope` block — files or behaviors outside `In scope` (or explicitly listed `Out of scope`) are scope-creep, flag as Blocking. Decisions that contradict resolved `Open questions` are Blocking.
+     - **Rebase integrity**: nothing lost from concurrent merges to main.
+     - **Correctness of renames / retargets**: any straggler reference to old names, routes, file paths.
+     - **Race conditions in new DB writes**: the select-then-insert antipattern is common — prefer `INSERT ... ON CONFLICT DO UPDATE` for upserts.
+     - **Redundant migration blocks**: codex tends to duplicate bootstrap + migration for the same table.
+     - **UI parity across sibling pages**: if the feature lives in both a list and a detail view, check both.
+     - **Test gaps**: UNIQUE constraints, auth paths, toggle-off-then-on flows.
+     - **Project-rule compliance**: no AI-tool references (Claude / Codex / Copilot) in code, comments, or commit messages; conventional commit prefix; no `--no-verify`; no `TODO`/`FIXME`/`console.log` slop.
+   - The output contract: write JSON to `<worktree>/.codex-review-output.json`. The orchestrator enforces read-only via the snapshot recipe in `invoking-codex-exec`.
 
-   - **Default (parallel)** — dispatch one in-harness `superpowers:code-reviewer` subagent per PR/worktree, fired together via `superpowers:dispatching-parallel-agents`. Each subagent reads its own worktree's diff (`git diff origin/main...origin/<branch>`), the issue spec, the spot-check notes, and CLAUDE.md / AGENTS.md. Results return as structured findings ready to merge into the orchestrator's working state.
-   - **Escalation (per PR, sequential)** — fresh `claude -p --dangerously-skip-permissions --add-dir <worktree> --output-format json --model opus "<review prompt>"` for high-stakes PRs (production-critical, security-sensitive, or where the issue spec itself may be wrong). Clean-room context, no main-session bias. See `codex-task-waves`'s "Review delegation" section for the full invocation template.
-   - **Never codex** — codex's value is autonomous execution; review is read+reason. Same sandbox traps as `invoking-codex-exec` apply for zero benefit.
+3. **Concurrency notes for parallel review**:
+   - Each reviewer codex runs in its own worktree. No file-system contention — review-output paths are per-worktree, source paths are per-branch.
+   - Each reviewer is dispatched as its own background `codex exec` process with its own log file (`/tmp/codex-review-<PR-N>.log`). Wait by PID, same as implementer dispatches. Schedule a single aggregated wakeup if multiple reviewers are still in flight, not one wakeup per reviewer.
+   - The implementer codex must finish (PID exit) before its reviewer codex starts in the same worktree. Sequential per worktree, parallel across worktrees.
 
-   Whichever target is used, the reviewer should look at:
-   - Scope adherence: the diff stays within the dispatch prompt's `## Scope` block — files or behaviors outside `In scope` (or explicitly listed `Out of scope`) are scope-creep, flag as Blocking; decisions that contradict resolved `Open questions` are also Blocking
-   - Rebase integrity (nothing lost from concurrent merges to main)
-   - Correctness of renames / retargets
-   - Race conditions in new DB writes (the select-then-insert antipattern is common — prefer `INSERT ... ON CONFLICT DO UPDATE` for upserts)
-   - Redundant migration blocks (codex tends to duplicate bootstrap + migration for the same table)
-   - UI parity across sibling pages (if the feature lives in both a list and a detail view, check both)
-   - Test gaps (UNIQUE constraints, auth paths, toggle-off-then-on flows)
-   - Project-rule compliance (no AI references, conventional commits, no skipped hooks)
-
-4. **Categorize findings**:
-   - **Blocking**: TS errors, missing parity with ADR/issue spec, real data-integrity bugs, security. These must be fixed before merge.
-   - **Should-fix**: performance, race conditions, test gaps, small regressions. Fix now unless explicitly scoped out.
-   - **Nit/follow-up**: style, future extractions, documentation. Post as comment; don't block.
-
-5. **Cross-check reviewer against the issue spec.** Code-reviewer agents sometimes flag a feature as "scope change" when it was in fact asked for in the issue. Read the issue body yourself before insisting on a "scope change" fix.
+4. **Read all review outputs and decide per PR** — once every reviewer has exited:
+   - Validate each `.codex-review-output.json` is parseable. Malformed → handle per `invoking-codex-exec` "When the JSON is malformed".
+   - Verify read-only enforcement passed for each. Boundary violation → handle per `invoking-codex-exec` "Read-only enforcement".
+   - For each PR, decide:
+     - `verdict: approved` and empty `blocking`/`scope_violations` → eligible for merge (still subject to the merge-order decision below).
+     - Any `blocking` or `scope_violations` → schedule a corrector dispatch for that PR.
+     - Only `should_fix` or `nits` → claude decides per item: address now via corrector, or defer to PR comment with reasoning. `nits` default to deferral.
+   - Cross-check `scope_violations` against the issue body (NOT the diff). Reviewer codex sometimes flags a feature as scope-creep when it was actually requested in the issue. Read the issue body — that is a status read, not a code review.
 
 ## Correction wave
 
-Two paths for blockers:
+Every blocker → corrector dispatch via `invoking-codex-exec` (corrector role). No in-place fixes by claude. No "small fix" path. Even one-line typos go through codex.
 
-**Path A — fix in-place**: If the blockers are small (< ~5 files, < ~100 lines) and you understand them, just fix them yourself in the worktree. Faster than respawning codex. Run tests, commit, `git push --force-with-lease` (rebased branches only — use `--force-with-lease` not `--force`).
+For each PR with blockers:
 
-**Path B — respawn codex**: If the corrections are large (rebase conflicts, renames across 10+ files, new subsystem) OR require exploring the codebase to understand, write a focused correction prompt and respawn codex on the same worktree. See `references/prompt-template.md` for the correction-prompt shape.
-
-After either path:
-- Post a PR comment summarizing what changed (so the reviewer agent doesn't have to re-read the whole diff).
-- Wait for CI via `scripts/wait_for_ci.sh <PR>` — run it through the harness's background-command mechanism so the exit event wakes the agent; do not inline-poll in bash.
-- If still blocked, another review round; otherwise merge.
+1. Compose the corrector prompt per the correction-prompt template in `references/prompt-template.md`. Include:
+   - Path to the original dispatch prompt.
+   - Path to `.codex-review-output.json`.
+   - Explicit list of items the corrector must address (subset of `blocking` ∪ chosen `should_fix` ∪ `scope_violations`).
+   - A `## Scope` block whose `In scope` is exactly those items and whose `Out of scope` is "everything else, including all `nits` and any item the orchestrator deferred".
+2. Launch the corrector codex in background (same worktree). Wait by PID. If multiple correctors run in parallel (different worktrees), one aggregated wakeup.
+3. After corrector exits:
+   - Status check: `git log --oneline origin/main..origin/<branch>` to confirm a fixup commit landed.
+   - Push: `git push --force-with-lease` if the corrector rebased; otherwise plain push. Claude runs the push command directly — pushing is status, not code work.
+   - Post a PR comment summarizing what changed, so the next reviewer doesn't have to re-read the whole diff. Comment text is composed by claude from the review JSON + the corrector prompt — it's a status report, not code judgment.
+   - Wait for CI via `scripts/wait_for_ci.sh <PR>` — run through the harness's background-command mechanism so the exit event wakes the agent; do not inline-poll in bash.
+4. Re-dispatch reviewer (back to step 2 of the review wave for this PR).
+5. After 3 corrector cycles for the same PR without `verdict: approved`, escalate to user. The plan or the issue itself is likely wrong — don't loop indefinitely.
 
 ## Merge + cleanup
 
@@ -122,17 +135,21 @@ Merging to main does not auto-deploy in most repos. If the user asks to "deploy"
 
 ## Key pitfalls
 
-See `references/pitfalls.md` for the full list. The top three are:
+See `references/pitfalls.md` for the full list. The top items:
 
-- **Codex builds, claude reviews** — claude code is the orchestrator; codex is for implementation only. Reviewers are always claude (in-harness subagent or fresh `claude -p`). Never dispatch codex for the review wave.
-- **Self-review is blocked by GitHub** — `gh pr review --approve` fails with "cannot approve your own PR". Post via `gh pr comment` instead.
+- **Claude is the PO, codex is the worker — for build AND review** — every code touch is a codex dispatch. Building is implementer codex, reviewing is reviewer codex (read-only, JSON output), correcting is corrector codex. Claude never edits source files, never reads diffs for judgment, never makes "quick in-place fixes."
+- **Reviewer codex needs read-only enforcement** — codex has no built-in read-only mode. The orchestrator must snapshot HEAD + working tree before dispatch and verify they're unchanged after. See `invoking-codex-exec` "Read-only enforcement". Two consecutive boundary violations → escalate.
+- **Reviewer JSON can be malformed** — codex occasionally produces invalid JSON or empty review files. One re-dispatch with a stronger contract; second failure → escalate.
+- **Self-review is blocked by GitHub** — `gh pr review --approve` fails with "cannot approve your own PR" for the PR's author account. Post via `gh pr comment` instead.
 - **Worktree pins branch** — local branch delete fails until the worktree is removed. Always clean in that order.
-- **Codex output ≠ committed code** — transient conflict markers in the codex log are not the same as committed markers. Verify with `gh pr diff` before raising the alarm.
+- **Codex log ≠ committed code** — transient conflict markers in the codex log are not the same as committed markers. Verify with `gh pr diff <N>` before raising the alarm.
+- **Status checks vs. content checks** — `gh pr view`, `git log --oneline`, `git diff --stat`, CI status: status, claude does these. Reading the diff to judge if it's good: content, that's a reviewer codex dispatch.
 
 ## Success criteria
 
 The batch is done when:
 - Every non-skipped issue has an open or merged PR.
-- Every open PR has been through both the spot-check and the reviewer-agent pass.
-- No PR has been merged without at least one human-visible summary comment explaining what was changed vs the review feedback.
+- Every open PR has been through a reviewer-codex pass with `verdict: approved` and read-only enforcement passed.
+- Every PR has at least one human-visible summary comment composed by claude explaining what changed vs the review feedback (this is a status report, not a review).
 - Every worktree created by this skill has been removed after its branch merged.
+- No code touch was made by claude during the run. Audit by checking that every commit on every branch was authored within a codex run.
