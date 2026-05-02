@@ -76,6 +76,7 @@ This trust-but-verify check costs ~5 seconds and routinely saves a full re-run.
 One prompt block, no nested instructions. Include:
 
 - Path to a plan file (if one exists) and an instruction to read it first.
+- A `## Scope` block with three required headings: `In scope`, `Out of scope`, `Open questions` (each with at least one bullet, or `none`). The wave skills (`codex-task-waves`, `codex-issue-waves`) require this; one-shot dispatches are strongly encouraged. See those skills for the canonical shape and rules.
 - Concrete verification commands to run from the worktree root (`./gradlew formatKotlin && ./gradlew compileKotlin && ./gradlew test`, `pnpm tsc --noEmit && pnpm test`, etc.).
 - Explicit boundaries: don't commit, don't push, don't edit CHANGELOG, don't bypass hooks.
 - Reference to project rules: `CLAUDE.md`, `AGENTS.md`.

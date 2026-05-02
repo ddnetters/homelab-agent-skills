@@ -55,11 +55,12 @@ For each wave, in order:
 1. **Dispatch** via `invoking-codex-exec`. The codex prompt must include:
    - The plan file path and an instruction to read it first.
    - The current wave's specific instructions and exit condition.
+   - A `## Scope` block with three required headings (`In scope`, `Out of scope`, `Open questions`). The plan file's spec section feeds the per-wave Scope blocks but does not replace them — each wave gets its own block tuned to that wave's surface. `Open questions` documents resolved decisions, not unresolved ones; resolve any genuinely-open question before dispatch.
    - The verification commands for this wave (compile, format, the relevant test slice).
    - Boundary: "Do not touch surfaces from wave N+1" — name them.
    - The same single-task boundaries: don't commit, don't push, don't edit CHANGELOG, don't bypass hooks.
 2. **Verify** — `git status` and `git diff` first (per `invoking-codex-exec` trust-but-verify). Run the wave's verification commands yourself if codex didn't, or if codex was killed mid-run.
-3. **Review** — see "Review delegation" below. Default is an in-harness claude subagent via `superpowers:requesting-code-review` / `superpowers:code-reviewer`. Brief it with the plan file, the wave's exit condition, and the wave's diff (`git diff <last-wave-commit>..HEAD`). **Never use codex for review** — it's a wrong-tool match for read+reason work, and the sandbox traps in `invoking-codex-exec` apply. Categorize findings:
+3. **Review** — see "Review delegation" below. Default is an in-harness claude subagent via `superpowers:requesting-code-review` / `superpowers:code-reviewer`. Brief it with the plan file, the wave's exit condition, and the wave's diff (`git diff <last-wave-commit>..HEAD`). **Never use codex for review** — it's a wrong-tool match for read+reason work, and the sandbox traps in `invoking-codex-exec` apply. Brief the reviewer to verify the diff stays within the dispatch prompt's `## Scope` block — files or behaviors outside `In scope` (or explicitly listed `Out of scope`) are scope-creep, flag as Blocking; decisions that contradict resolved `Open questions` are also Blocking. Categorize findings:
    - **Blocking** — must fix before next wave.
    - **Should-fix** — fix in this wave unless explicitly out of scope.
    - **Nit / follow-up** — annotate, defer to PR comment.

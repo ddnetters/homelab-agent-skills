@@ -26,6 +26,20 @@ Read these before writing any code:
 
 [Paste the full issue body here. Do not truncate. Do not link to the issue — inline it. Codex should not need to run `gh issue view`.]
 
+## Scope
+
+### In scope
+- <thing 1 the orchestrator deliberately authorized — file/feature/decision>
+- <thing 2>
+
+### Out of scope
+- <adjacent thing codex might be tempted to touch — name it>
+- <refactor codex might suggest — pre-emptively rule it out>
+
+### Open questions
+- <decision orchestrator made and codex must NOT revisit, format: "Q: ... → resolved: <pick>, because <reason>">
+- (or `none`)
+
 ## Execution steps
 
 Numbered, concrete, starting with `cd` into the worktree and reading CLAUDE.md. Include:
@@ -53,6 +67,7 @@ Numbered, concrete, starting with `cd` into the worktree and reading CLAUDE.md. 
 - **Absolute paths for project-level rules.** `/Users/name/code/project/CLAUDE.md` is unambiguous; `CLAUDE.md` is ambiguous across worktrees.
 - **Concrete file pointers.** Instead of "update the repository", write "update `packages/core/src/repositories/sqlite/adapters/X.repository.ts`".
 - **Explicit scope fences.** "Do NOT touch Y — that is step #N's scope, not this PR." Codex is eager to clean up adjacent code; fence it.
+- **The `## Scope` block is the canonical scope fence.** All three sub-headings (`In scope`, `Out of scope`, `Open questions`) must be present and non-empty (use `none` when truly empty). `Open questions` documents decisions the orchestrator already resolved — codex must not revisit them. If a question is genuinely open at dispatch time, the orchestrator resolves it before dispatch; codex never sees an unresolved question.
 - **No hedging.** Write "switch to `INSERT ... ON CONFLICT DO UPDATE`". Don't write "consider using upsert semantics". Codex does exactly what you say.
 - **Return the PR URL.** State this as a non-negotiable so codex definitely surfaces it at the end.
 - **Don't babysit test commands.** Say "run `npm test` per workspace, all green." Don't list every command; codex knows `npm test`.
@@ -71,6 +86,20 @@ You are an autonomous engineering agent picking up an existing PR that needs to 
 ## Why it needs rework
 
 [State the blocker from the review. Be specific — include the file and line where possible.]
+
+## Scope
+
+### In scope
+- <fix items required by the review>
+- <files the rework is allowed to touch>
+
+### Out of scope
+- <files / behaviors the original PR touched that the rework must NOT modify>
+- <refactors the reviewer did not ask for>
+
+### Open questions
+- <reviewer decisions documented as resolved, format: "Q: ... → resolved: <pick>, because <reason>">
+- (or `none`)
 
 ## What you need to do
 
