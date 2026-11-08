@@ -145,6 +145,36 @@ See `references/pitfalls.md` for the full list. The top items:
 - **Codex log ≠ committed code** — transient conflict markers in the codex log are not the same as committed markers. Verify with `gh pr diff <N>` before raising the alarm.
 - **Status checks vs. content checks** — `gh pr view`, `git log --oneline`, `git diff --stat`, CI status: status, claude does these. Reading the diff to judge if it's good: content, that's a reviewer codex dispatch.
 
+## Phase logging (WAVE_PHASE)
+
+Emit structured phase-marker lines around every codex dispatch. This feeds the weekly performance report (`~/scripts/codex-waves-perf-report.sh`).
+
+**Log file**: `${CODEX_WAVE_LOG:-$HOME/tasks/logs/codex-waves-manual.log}` — append, never overwrite.
+
+**Wave ID**: `${CODEX_WAVE_ID}` if that env var is set; otherwise generate once per batch as `$(date +%Y%m%dT%H%M%S)-<first-issue-number>` and reuse for all issues and phases in this batch.
+
+**Line format**:
+```
+[ISO8601Z] WAVE_PHASE wave=<id> repo=<owner/repo> issue=<n> phase=<implement|review|correct|merge> event=<start|end> exit=<code> duration_s=<s> tokens=<n>
+```
+For `event=start`: leave `exit=`, `duration_s=`, `tokens=` empty. For `event=end`: fill all fields.
+
+**Token extraction**: run `~/scripts/parse-codex-log.sh <codex-outfile>` after the codex process exits; grep for `^tokens=`.
+
+**When to emit** (per issue, per phase):
+- `implement start/end` — before/after the implementer codex dispatch for each issue's worktree.
+- `review start/end` — before/after each reviewer codex dispatch (per-issue, per review round).
+- `correct start/end` — before/after each corrector codex dispatch (per-issue, per corrector cycle).
+- `merge start/end` — before/after the merge step for each issue's PR.
+
+**Shell pattern** (reuse from `codex-task-waves` skill's Phase logging section, substituting `<issue>` per issue).
+
+**Codex log archival** — after each `event=end`, copy the codex outfile:
+```bash
+mkdir -p "$HOME/tasks/logs/codex-runs/${WAVE_ID}"
+cp "<outfile>" "$HOME/tasks/logs/codex-runs/${WAVE_ID}/<phase>-<issue>-<n>.out"
+```
+
 ## Success criteria
 
 The batch is done when:

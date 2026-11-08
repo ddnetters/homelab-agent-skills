@@ -153,6 +153,53 @@ The PR body is content claude composes. This is not "review" — it's a manager 
 | Single-wave task, but you wrote 100 lines of plan | Plan is over-engineered for the task | Trim plan, dispatch, move on |
 | User said "just have codex fix it" but you start lecturing about waves | Single-wave answer was correct; just proceed | State "1 wave, here's why," then go |
 
+## Phase logging (WAVE_PHASE)
+
+Emit structured phase-marker lines around every codex dispatch. This feeds the weekly performance report (`~/scripts/codex-waves-perf-report.sh`).
+
+**Log file**: `${CODEX_WAVE_LOG:-$HOME/tasks/logs/codex-waves-manual.log}` — append, never overwrite.
+
+**Wave ID**: `${CODEX_WAVE_ID}` if that env var is set (orchestrator sets it); otherwise generate once at session start as `$(date +%Y%m%dT%H%M%S)-<issue-number>` and reuse across all phases.
+
+**Line format**:
+```
+[ISO8601Z] WAVE_PHASE wave=<id> repo=<owner/repo> issue=<n> phase=<implement|review|correct|merge> event=<start|end> exit=<code> duration_s=<s> tokens=<n>
+```
+For `event=start`: leave `exit=`, `duration_s=`, `tokens=` empty. For `event=end`: fill all fields.
+
+**Token extraction**: run `~/scripts/parse-codex-log.sh <codex-outfile>` after the codex process exits; grep for `^tokens=` in the output.
+
+**When to emit**:
+- `implement start/end` — before/after each implementer codex dispatch per wave.
+- `review start/end` — before/after each reviewer codex dispatch.
+- `correct start/end` — before/after each corrector codex dispatch (one pair per cycle).
+- `merge start/end` — before/after the merge/PR-open step.
+
+**Shell pattern** (adapt repo, issue, outfile):
+```bash
+WAVE_LOG="${CODEX_WAVE_LOG:-$HOME/tasks/logs/codex-waves-manual.log}"
+WAVE_ID="${CODEX_WAVE_ID:-$(date +%Y%m%dT%H%M%S)-<issue>}"
+mkdir -p "$(dirname "$WAVE_LOG")"
+
+wave_log() {
+    local phase="$1" event="$2" exit_code="${3:-}" duration="${4:-}" logfile="${5:-}"
+    local tokens=""
+    if [[ "$event" == "end" && -n "$logfile" && -f "$logfile" ]]; then
+        tokens=$(~/scripts/parse-codex-log.sh "$logfile" 2>/dev/null | grep '^tokens=' | cut -d= -f2 || true)
+    fi
+    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] WAVE_PHASE wave=${WAVE_ID} repo=<owner/repo> issue=<n> phase=${phase} event=${event} exit=${exit_code} duration_s=${duration} tokens=${tokens}" >> "$WAVE_LOG"
+}
+
+# Usage:
+T0=$(date +%s); wave_log implement start
+codex exec ... > /tmp/codex-runs/${WAVE_ID}-impl.out 2>&1; EC=$?
+wave_log implement end "$EC" "$(($(date +%s) - T0))" "/tmp/codex-runs/${WAVE_ID}-impl.out"
+
+# After each phase end, archive the codex output:
+mkdir -p "$HOME/tasks/logs/codex-runs/${WAVE_ID}"
+cp "/tmp/codex-runs/${WAVE_ID}-impl.out" "$HOME/tasks/logs/codex-runs/${WAVE_ID}/implement-1.out"
+```
+
 ## When this skill applies
 
 - "Have codex fix this" / "have codex implement this" / "have codex handle this"
